@@ -233,8 +233,12 @@ namespace krabs { namespace testing {
         if (!results.second.empty()) {
             std::string msg = "Not all the properties of the event were filled:";
 
-            for (auto& s : results.second)
+            for (auto& s : results.second) {
+#pragma warning(push)
+#pragma warning(disable: 4244) // narrowing property name wchar_t to char for this error message
                 msg += " " + std::string(s.begin(), s.end());
+#pragma warning(pop)
+            }
 
             throw std::invalid_argument(msg);
         }
@@ -270,7 +274,8 @@ namespace krabs { namespace testing {
     record_builder::pack_impl(const EVENT_RECORD &record) const
     {
         std::pair<std::vector<BYTE>, std::vector<std::wstring>> results;
-        krabs::schema event_schema(record);
+        krabs::schema_locator schema_locator;
+        krabs::schema event_schema(record, schema_locator);
         krabs::parser event_parser(event_schema);
 
         // When the last property in a record is of string type (ansi or unicode), 

@@ -117,13 +117,17 @@ namespace Microsoft { namespace O365 { namespace Security { namespace ETW {
         }
 
         /// <summary>
-        /// Represents the "level" value on the provider's options, where
-        /// "level" determines events in what categories are 
-        /// enabled for notification.
+        /// Represents the "EnabledProperty" value on the provider's options.
+        /// Values are documented here:
+        /// https://docs.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-enable_trace_parameters
         /// </summary>
         property TraceFlags TraceFlags {
+            ETW::TraceFlags get() {
+                return static_cast<ETW::TraceFlags>(provider_->trace_flags());
+            }
+
             void set(O365::Security::ETW::TraceFlags value) {
-                provider_->trace_flags((UCHAR)value);
+                provider_->trace_flags((ULONG)value);
             }
         }
 
@@ -148,10 +152,10 @@ namespace Microsoft { namespace O365 { namespace Security { namespace ETW {
         event EventRecordErrorDelegate^ OnError;
 
     internal:
-        void EventNotification(const EVENT_RECORD &);
+        void EventNotification(const EVENT_RECORD &, const krabs::trace_context &);
 
     internal:
-        delegate void NativeHookDelegate(const EVENT_RECORD &);
+        delegate void NativeHookDelegate(const EVENT_RECORD &, const krabs::trace_context &);
 
         NativeHookDelegate ^del_;
         NativePtr<krabs::provider<>> provider_;
@@ -198,11 +202,11 @@ namespace Microsoft { namespace O365 { namespace Security { namespace ETW {
         }
     }
 
-    inline void Provider::EventNotification(const EVENT_RECORD &record)
+    inline void Provider::EventNotification(const EVENT_RECORD &record, const krabs::trace_context &trace_context)
     {
         try
         {
-            krabs::schema schema(record);
+            krabs::schema schema(record, trace_context.schema_locator);
             krabs::parser parser(schema);
 
             OnEvent(gcnew EventRecord(record, schema, parser));

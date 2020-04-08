@@ -10,6 +10,8 @@
 
 #include "compiler_check.hpp"
 #include "filtering/event_filter.hpp"
+#include "perfinfo_groupmask.hpp"
+#include "trace_context.hpp"
 
 #include <evntcons.h>
 #include <guiddef.h>
@@ -35,8 +37,8 @@ namespace krabs {
     template <typename T>
     class trace;
 
-    typedef void(*c_provider_callback)(const EVENT_RECORD &);
-    typedef std::function<void(const EVENT_RECORD &)> provider_callback;
+    typedef void(*c_provider_callback)(const EVENT_RECORD &, const krabs::trace_context &);
+    typedef std::function<void(const EVENT_RECORD &, const krabs::trace_context &)> provider_callback;
 
     namespace details {
 
@@ -101,7 +103,7 @@ namespace krabs {
              *   Called when an event occurs, forwards to callbacks and filters.
              * </summary>
              */
-            void on_event(const EVENT_RECORD &record) const;
+            void on_event(const EVENT_RECORD &record, const krabs::trace_context &context) const;
 
         protected:
             std::deque<provider_callback> callbacks_;
@@ -223,6 +225,23 @@ namespace krabs {
         void trace_flags(T trace_flags);
 
         /**
+        * <summary>
+        * Gets the configured value for the "EnableProperty" flag on the 
+        * ENABLE_TRACE_PARAMETER struct. See void trace_flags(T trace_flags)
+        * for details on what the values mean.
+        * </summary>
+        * <returns>The value to set when the provider is enabled.</returns>
+        * <example>
+        *    krabs::guid id(L"{A0C1853B-5C40-4B15-8766-3CF1C58F985A}");
+        *    provider<> powershell(id);
+        *    powershell.trace_flags(EVENT_ENABLE_PROPERTY_STACK_TRACE);
+        *    auto flags = powershell.get_trace_flags(); 
+        *    assert(flags == EVENT_ENABLE_PROPERTY_STACK_TRACE);
+        * </example>
+        */
+        T trace_flags() const;
+
+        /**
          * <summary>
          * Turns a strongly typed provider<T> to provider<> (useful for
          * creating collections of providers).
@@ -275,11 +294,27 @@ namespace krabs {
         kernel_provider(unsigned long flags, const GUID &id)
         : p_(flags)
         , id_(id)
+        , gm_(0)
         {}
 
         /**
          * <summary>
-         * Retrieves the GUID associated with this provider.
+         *   Constructs a kernel_provider that enables events of the given
+         *   group mask.
+         * </summary>
+         * <remarks>
+         *   Only supported on Windows 8 and newer.
+         * </remarks>
+         */
+        kernel_provider(const GUID& id, PERFINFO_MASK group_mask)
+            : p_(0)
+            , id_(id)
+            , gm_(group_mask)
+        {}
+
+        /**
+         * <summary>
+         *   Retrieves the GUID associated with this provider.
          * </summary>
          */
          const krabs::guid &id() const;
@@ -293,9 +328,17 @@ namespace krabs {
          */
         unsigned long flags() const { return p_; }
 
+        /**
+         * <summary>
+         *   Retrieves the group mask value associated with this provider.
+         * </summary>
+         */
+        PERFINFO_MASK group_mask() const { return gm_; }
+
     private:
         unsigned long p_;
         const krabs::guid id_;
+        PERFINFO_MASK gm_;
 
     private:
         friend struct details::kt;
@@ -344,17 +387,16 @@ namespace krabs {
         }
 
         template <typename T>
-        void base_provider<T>::on_event(const EVENT_RECORD &record) const
+        void base_provider<T>::on_event(const EVENT_RECORD &record, const krabs::trace_context &trace_context) const
         {
             for (auto &callback : callbacks_) {
-                callback(record);
+                callback(record, trace_context);
             }
 
             for (auto &filter : filters_) {
-                filter.on_event(record);
+                filter.on_event(record, trace_context);
             }
         }
-
     } // namespace details
 
     // ------------------------------------------------------------------------
@@ -486,13 +528,19 @@ namespace krabs {
     }
 
     template <typename T>
+    T provider<T>::trace_flags() const
+    {
+        return static_cast<T>(trace_flags_);
+    }
+
+    template <typename T>
     provider<T>::operator provider<>() const
     {
         provider<> tmp(guid_);
         tmp.any_            = static_cast<ULONGLONG>(any_);
         tmp.all_            = static_cast<ULONGLONG>(all_);
         tmp.level_          = static_cast<UCHAR>(level_);
-        tmp.trace_flags_    = static_cast<UCHAR>(trace_flags_);
+        tmp.trace_flags_    = static_cast<ULONG>(trace_flags_);
         tmp.callbacks_      = this.callbacks_;
 
         return tmp;

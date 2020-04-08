@@ -26,7 +26,7 @@
     <ProjectName>Microsoft.O365.Security.Native.ETW</ProjectName>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">.\</SolutionDir>
     <RestorePackages>true</RestorePackages>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -87,7 +87,7 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;$(ProjectDir)..\krabs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <GenerateXMLDocumentationFiles>true</GenerateXMLDocumentationFiles>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -96,7 +96,7 @@
       <AssemblyDebug>true</AssemblyDebug>
     </Link>
     <PreBuildEvent>
-      <Command>if not exist $(SolutionDir)..\35MSSharedLib1024.snk sn.exe -k $(SolutionDir)..\35MSSharedLib1024.snk</Command>
+      <Command>if not exist $(ProjectDir)..\35MSSharedLib1024.snk sn.exe -k $(ProjectDir)..\35MSSharedLib1024.snk</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Verify snk file is generated</Message>
@@ -111,7 +111,7 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;$(ProjectDir)..\krabs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <GenerateXMLDocumentationFiles>true</GenerateXMLDocumentationFiles>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -120,7 +120,7 @@
       <AssemblyDebug>true</AssemblyDebug>
     </Link>
     <PreBuildEvent>
-      <Command>if not exist $(SolutionDir)..\35MSSharedLib1024.snk sn.exe -k $(SolutionDir)..\35MSSharedLib1024.snk</Command>
+      <Command>if not exist $(ProjectDir)..\35MSSharedLib1024.snk sn.exe -k $(ProjectDir)..\35MSSharedLib1024.snk</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Verify snk file is generated</Message>
@@ -143,7 +143,7 @@
     <ClCompile>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>NDEBUG;UNICODE;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;$(ProjectDir)..\krabs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <GenerateXMLDocumentationFiles>true</GenerateXMLDocumentationFiles>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -151,7 +151,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PreBuildEvent>
-      <Command>if not exist $(SolutionDir)..\35MSSharedLib1024.snk sn.exe -k $(SolutionDir)..\35MSSharedLib1024.snk</Command>
+      <Command>if not exist $(ProjectDir)..\35MSSharedLib1024.snk sn.exe -k $(ProjectDir)..\35MSSharedLib1024.snk</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Verify snk file is generated</Message>
@@ -164,7 +164,7 @@
     <ClCompile>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>NDEBUG;UNICODE;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\inc;$(ProjectDir)..\krabs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <GenerateXMLDocumentationFiles>true</GenerateXMLDocumentationFiles>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -172,7 +172,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PreBuildEvent>
-      <Command>if not exist $(SolutionDir)..\35MSSharedLib1024.snk sn.exe -k $(SolutionDir)..\35MSSharedLib1024.snk</Command>
+      <Command>if not exist $(ProjectDir)..\35MSSharedLib1024.snk sn.exe -k $(ProjectDir)..\35MSSharedLib1024.snk</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Verify snk file is generated</Message>
@@ -187,7 +187,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\krabs\krabs.cpp" />
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="ETWLib.cpp" />
   </ItemGroup>
@@ -196,6 +195,7 @@
     <ClInclude Include="Errors.hpp" />
     <ClInclude Include="EventRecordError.hpp" />
     <ClInclude Include="EventRecordMetadata.hpp" />
+    <ClInclude Include="EventTraceProperties.hpp" />
     <ClInclude Include="Filtering\AnsiString.hpp" />
     <ClInclude Include="Filtering\CountedString.hpp" />
     <ClInclude Include="Filtering\EventFilter.hpp" />

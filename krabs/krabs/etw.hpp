@@ -63,13 +63,6 @@ namespace krabs { namespace details {
         EVENT_TRACE_LOGFILE open();
 
         /**
-        * <summary>
-        * Starts processing the ETW trace. Must be preceeded by a call to open.
-        * </summary>
-        */
-        void process();
-
-        /**
          * <summary>
          * Queries the ETW trace identified by the info in the trace type.
          * </summary>
@@ -93,9 +86,8 @@ namespace krabs { namespace details {
     private:
         trace_info fill_trace_info();
         EVENT_TRACE_LOGFILE fill_logfile();
-        void unregister_trace();
+        void close_trace();
         void register_trace();
-        void start_trace();
         EVENT_TRACE_PROPERTIES query_trace();
         void stop_trace();
         EVENT_TRACE_LOGFILE open_trace();
@@ -159,9 +151,10 @@ namespace krabs { namespace details {
     template <typename T>
     void trace_manager<T>::start()
     {
-        register_trace();
-        enable_providers();
-        start_trace();
+        if (trace_.sessionHandle_ == INVALID_PROCESSTRACE_HANDLE) {
+            (void)open();
+        }
+        process_trace();
     }
 
     template <typename T>
@@ -173,12 +166,6 @@ namespace krabs { namespace details {
     }
 
     template <typename T>
-    void trace_manager<T>::process()
-    {
-        process_trace();
-    }
-
-    template <typename T>
     EVENT_TRACE_PROPERTIES trace_manager<T>::query()
     {
         return query_trace();
@@ -187,8 +174,8 @@ namespace krabs { namespace details {
     template <typename T>
     void trace_manager<T>::stop()
     {
-        unregister_trace();
         stop_trace();
+        close_trace();
     }
 
     template <typename T>
@@ -206,27 +193,23 @@ namespace krabs { namespace details {
     template <typename T>
     trace_info trace_manager<T>::fill_trace_info()
     {
-        trace_info info;
-        ZeroMemory(&info, sizeof(info));
-
-        // TODO: should we override the ETW defaults for
-        // buffer count and buffer size to help ensure
-        // we aren't dropping events on memory-bound machines?
-
-        // Default: 64kb buffers, 1 min and 24 max buffer count
-
-        //info.properties.BufferSize = 64;
-        //info.properties.MinimumBuffers = 16;
-        //info.properties.MaximumBuffers = 64;
-
+        trace_info info = {};
         info.properties.Wnode.BufferSize    = sizeof(trace_info);
         info.properties.Wnode.Guid          = T::trace_type::get_trace_guid();
         info.properties.Wnode.Flags         = WNODE_FLAG_TRACED_GUID;
         info.properties.Wnode.ClientContext = 1; // QPC clock resolution
-        info.properties.FlushTimer          = 1; // flush every second
-        info.properties.LogFileMode         = EVENT_TRACE_REAL_TIME_MODE
-                                            | EVENT_TRACE_NO_PER_PROCESSOR_BUFFERING
-                                            | T::trace_type::augment_file_mode();
+        info.properties.BufferSize          = trace_.properties_.BufferSize;
+        info.properties.MinimumBuffers      = trace_.properties_.MinimumBuffers;
+        info.properties.MaximumBuffers      = trace_.properties_.MaximumBuffers;
+        info.properties.FlushTimer          = trace_.properties_.FlushTimer;
+
+        if (trace_.properties_.LogFileMode)
+            info.properties.LogFileMode     = trace_.properties_.LogFileMode;
+        else
+            info.properties.LogFileMode     = EVENT_TRACE_REAL_TIME_MODE
+                                            | EVENT_TRACE_NO_PER_PROCESSOR_BUFFERING;
+
+        info.properties.LogFileMode         |= T::trace_type::augment_file_mode();
         info.properties.LoggerNameOffset    = offsetof(trace_info, logfileName);
         info.properties.EnableFlags         = T::trace_type::construct_enable_flags(trace_);
         assert(info.traceName[0] == '\0');
@@ -238,31 +221,27 @@ namespace krabs { namespace details {
     template <typename T>
     EVENT_TRACE_LOGFILE trace_manager<T>::fill_logfile()
     {
-        EVENT_TRACE_LOGFILE file;
-        ZeroMemory(&file, sizeof(file));
+        EVENT_TRACE_LOGFILE file = {};
         file.LoggerName          = const_cast<wchar_t*>(trace_.name_.c_str());
-        file.LogFileName         = nullptr;
         file.ProcessTraceMode    = PROCESS_TRACE_MODE_EVENT_RECORD |
                                    PROCESS_TRACE_MODE_REAL_TIME;
         file.Context             = (void *)&trace_;
-        file.BufferCallback      = nullptr;
         file.EventRecordCallback = trace_callback_thunk<T>;
         file.BufferCallback      = trace_buffer_callback<T>;
         return file;
     }
 
     template <typename T>
-    void trace_manager<T>::unregister_trace()
+    void trace_manager<T>::stop_trace()
     {
-        if (trace_.registrationHandle_ != INVALID_PROCESSTRACE_HANDLE)
-        {
-            trace_info info = fill_trace_info();
-            ULONG status = ControlTrace(NULL,
-                trace_.name_.c_str(),
-                &info.properties,
-                EVENT_TRACE_CONTROL_STOP);
+        trace_info info = fill_trace_info();
+        ULONG status = ControlTrace(
+            NULL,
+            trace_.name_.c_str(),
+            &info.properties,
+            EVENT_TRACE_CONTROL_STOP);
 
-            trace_.registrationHandle_ = INVALID_PROCESSTRACE_HANDLE;
+        if (status != ERROR_WMI_INSTANCE_NOT_FOUND) {
             error_check_common_conditions(status);
         }
     }
@@ -270,15 +249,14 @@ namespace krabs { namespace details {
     template <typename T>
     EVENT_TRACE_PROPERTIES trace_manager<T>::query_trace()
     {
-        if (trace_.registrationHandle_ != INVALID_PROCESSTRACE_HANDLE)
-        {
-            trace_info info = fill_trace_info();
-            ULONG status = ControlTrace(
-                trace_.registrationHandle_,
-                trace_.name_.c_str(),
-                &info.properties,
-                EVENT_TRACE_CONTROL_QUERY);
+        trace_info info = fill_trace_info();
+        ULONG status = ControlTrace(
+            NULL,
+            trace_.name_.c_str(),
+            &info.properties,
+            EVENT_TRACE_CONTROL_QUERY);
 
+        if (status != ERROR_WMI_INSTANCE_NOT_FOUND) {
             error_check_common_conditions(status);
 
             return info.properties;
@@ -296,20 +274,26 @@ namespace krabs { namespace details {
                                   trace_.name_.c_str(),
                                   &info.properties);
         if (status == ERROR_ALREADY_EXISTS) {
-            unregister_trace();
-            status = StartTrace(&trace_.registrationHandle_,
-                                trace_.name_.c_str(),
-                                &info.properties);
+            try {
+                stop_trace();
+                status = StartTrace(&trace_.registrationHandle_,
+                    trace_.name_.c_str(),
+                    &info.properties);
+            }
+            catch (need_to_be_admin_failure) {
+                (void)open_trace();
+                close_trace();
+                // insufficient privilege to stop/configure
+                // but if open/close didn't throw also
+                // then we're okay to process events
+                status = ERROR_SUCCESS;
+                // we also invalidate the registrationHandle_
+                // StartTrace() actually sets this to 0 on failure
+                trace_.registrationHandle_ = INVALID_PROCESSTRACE_HANDLE;
+            }
         }
 
         error_check_common_conditions(status);
-    }
-
-    template <typename T>
-    void trace_manager<T>::start_trace()
-    {
-        (void)open_trace();
-        process_trace();
     }
 
     template <typename T>
@@ -318,7 +302,7 @@ namespace krabs { namespace details {
         auto file = fill_logfile();
         trace_.sessionHandle_ = OpenTrace(&file);
         if (trace_.sessionHandle_ == INVALID_PROCESSTRACE_HANDLE) {
-            throw start_trace_failure();
+            throw open_trace_failure();
         }
         return file;
     }
@@ -327,7 +311,7 @@ namespace krabs { namespace details {
     void trace_manager<T>::process_trace()
     {
         if (trace_.sessionHandle_ == INVALID_PROCESSTRACE_HANDLE) {
-            throw start_trace_failure();
+            throw open_trace_failure();
         }
 
         ::FILETIME now;
@@ -337,10 +321,9 @@ namespace krabs { namespace details {
     }
 
     template <typename T>
-    void trace_manager<T>::stop_trace()
+    void trace_manager<T>::close_trace()
     {
         if (trace_.sessionHandle_ != INVALID_PROCESSTRACE_HANDLE) {
-            unregister_trace();
             ULONG status = CloseTrace(trace_.sessionHandle_);
             trace_.sessionHandle_ = INVALID_PROCESSTRACE_HANDLE;
 

@@ -66,6 +66,49 @@ namespace Microsoft { namespace O365 { namespace Security { namespace ETW {
         virtual void Enable(O365::Security::ETW::KernelProvider ^provider);
 
         /// <summary>
+        /// Sets the trace properties for a session.
+        /// Must be called before Open()/Start().
+        /// See https://docs.microsoft.com/en-us/windows/win32/etw/event-trace-properties
+        /// for important details and restrictions.
+        ///
+        /// Configurable properties are ->
+        ///  - BufferSize. In KB. The maximum buffer size is 1024 KB.
+        ///  - MinimumBuffers. Minimum number of buffers is two per processor* .
+        ///  - MaximumBuffers.
+        ///  - FlushTimer. How often, in seconds, the trace buffers are forcibly flushed.
+        ///  - LogFileMode. EVENT_TRACE_NO_PER_PROCESSOR_BUFFERING simulates a *single* sequential processor.
+        /// </summary>
+        /// <param name="properties">the <see cref="O365::Security::ETW::EventTraceProperties"/> to set on the trace</param>
+        /// <example>
+        ///     var trace = new KernelTrace();
+        ///     var properties = new EventTraceProperties
+        ///     {
+        ///         BufferSize = 256,
+        ///         LogFileMode = (uint)LogFileModeFlags.FLAG_EVENT_TRACE_REAL_TIME_MODE
+        ///     };
+        ///     trace.SetTraceProperties(properties);
+        ///     // ...
+        ///     trace.Start();
+        /// </example>
+        virtual void SetTraceProperties(EventTraceProperties^ properties);
+
+        /// <summary>
+        /// Opens a trace session.
+        /// </summary>
+        /// <example>
+        ///     var trace = new KernelTrace();
+        ///     // ...
+        ///     trace.Open();
+        ///     // ...
+        ///     trace.Start();
+        /// </example>
+        /// <remarks>
+        /// This is an optional call before Start() if you need the trace
+        /// registered with the ETW subsystem before you start processing events.
+        /// </remarks>
+        virtual void Open();
+
+        /// <summary>
         /// Starts listening for events from the enabled providers.
         /// </summary>
         /// <example>
@@ -133,42 +176,35 @@ namespace Microsoft { namespace O365 { namespace Security { namespace ETW {
         return trace_->enable(*provider->provider_);
     }
 
+    inline void KernelTrace::SetTraceProperties(EventTraceProperties^ properties)
+    {
+        EVENT_TRACE_PROPERTIES _properties;
+        _properties.BufferSize = properties->BufferSize;
+        _properties.MinimumBuffers = properties->MinimumBuffers;
+        _properties.MaximumBuffers = properties->MaximumBuffers;
+        _properties.LogFileMode = properties->LogFileMode;
+        _properties.FlushTimer = properties->FlushTimer;
+        ExecuteAndConvertExceptions(return trace_->set_trace_properties(&_properties));
+    }
+
+    inline void KernelTrace::Open()
+    {
+        ExecuteAndConvertExceptions((void)trace_->open());
+    }
+
     inline void KernelTrace::Start()
     {
-        try
-        {
-            return trace_->start();
-        }
-        catch (const krabs::trace_already_registered &)
-        {
-            throw gcnew TraceAlreadyRegistered;
-        }
-        catch (const krabs::invalid_parameter &)
-        {
-            throw gcnew InvalidParameter;
-        }
-        catch (const krabs::start_trace_failure &)
-        {
-            throw gcnew StartTraceFailure;
-        }
-        catch (const krabs::no_trace_sessions_remaining &)
-        {
-            throw gcnew NoTraceSessionsRemaining;
-        }
-        catch (const krabs::need_to_be_admin_failure &)
-        {
-            throw gcnew UnauthorizedAccessException("Need to be admin");
-        }
+        ExecuteAndConvertExceptions(return trace_->start());
     }
 
     inline void KernelTrace::Stop()
     {
-        return trace_->stop();
+        ExecuteAndConvertExceptions(return trace_->stop());
     }
 
     inline TraceStats KernelTrace::QueryStats()
     {
-        return TraceStats(trace_->query_stats());
+        ExecuteAndConvertExceptions(return TraceStats(trace_->query_stats()));
     }
 
 } } } }

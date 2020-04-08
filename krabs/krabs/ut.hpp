@@ -26,7 +26,7 @@ namespace krabs { namespace details {
             UCHAR level_;
             ULONGLONG any_;
             ULONGLONG all_;
-            UCHAR trace_flags_;
+            ULONG trace_flags_;
         };
 
         struct filter_settings{
@@ -114,6 +114,9 @@ namespace krabs { namespace details {
     inline void ut::enable_providers(
         const krabs::trace<krabs::details::ut> &trace)
     {
+        if (trace.registrationHandle_ == INVALID_PROCESSTRACE_HANDLE)
+            return;
+
         provider_filter_settings provider_flags;
 
         // This function essentially takes the union of all the provider flags
@@ -193,7 +196,7 @@ namespace krabs { namespace details {
     {
         for (auto &provider : trace.providers_) {
             if (record.EventHeader.ProviderId == provider.get().guid_) {
-                provider.get().on_event(record);
+                provider.get().on_event(record, trace.context_);
             }
         }
     }
